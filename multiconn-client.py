@@ -3,6 +3,8 @@ import socket
 import selectors
 import types
 
+# To use type python multiconn-server.py 127.0.0.1 65432 2
+
 sel = selectors.DefaultSelector()
 messages = [b"Message 1 from client.", b"Message 2 from client."]
 
@@ -44,10 +46,10 @@ def start_connections(host, port, num_conns):
             outb=b"",
         )
         sel.register(sock, events, data=data)
-        events1 = sel.select(timeout=None)
-        for key, mask in events1:
-            service_connection(key, mask)
+    events1 = sel.select(timeout=None)
+    for key, mask in events1:
+        service_connection(key, mask)
 
-host, port, num_conns = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+host, port, num_conns = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]) # IP | Port | Number of Connections
 
 start_connections(host, port, num_conns)
