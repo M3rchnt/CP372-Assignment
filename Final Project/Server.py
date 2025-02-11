@@ -1,8 +1,10 @@
 import socket
 from threading import Thread
 import datetime
+import os
 
 MAX_CLIENTS = 3
+LIST_NAME = 'repository_list'
 
 class Server:
     Clients = []
@@ -12,6 +14,9 @@ class Server:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((HOST, PORT))
         self.socket.listen(MAX_CLIENTS)
+        if not os.path.exists(LIST_NAME): os.makedirs(LIST_NAME)
+        print(f"Server is listening on {HOST}:{PORT}")
+        print(f"Maximum clients allowed: {MAX_CLIENTS}")
         print("Server waiting for connection...")
         
     # Listen for connections on the main thread. When a connection
@@ -37,21 +42,20 @@ class Server:
 
                 client_connection_time = datetime.datetime.now()
                 client = {'client_name': client_name, 'client_socket': client_socket, 'client_connection_time': client_connection_time, 'client_disconnect_time': None}
-
-                # Broadcast that the new client has conected
-                # self.broadcast_message(client_name, client_name + " has joined the chat!")
+                clientCache = {'client_name': client_name, 'client_socket': client_socket.getsockname(), 'client_connection_time': client_connection_time, 'client_disconnect_time': None}
                 print(client_name + " has connected to the server. Created at: " + str(client_connection_time))
 
                 Server.Clients.append(client)
-                Server.Cache.append(client)
-                Thread(target = self.handle_new_client, args = (client,)).start()
+
+                Server.Cache.append(clientCache)
+                Thread(target = self.handle_new_client, args = (client, clientCache)).start()
         except KeyboardInterrupt:
             print("Caught keyboard interrupt, stopping server")
         finally:
             Server.Clients.clear() 
             self.socket.close()
 
-    def handle_new_client(self, client):
+    def handle_new_client(self, client, clientCache):
         client_name = client['client_name']
         client_socket = client['client_socket']
         while True:
@@ -60,46 +64,51 @@ class Server:
             # If the message is bye, remove the client from the list of clients and
             # close down the socket.
             if client_message.strip() == client_name + ": bye" or not client_message.strip():
-                # self.broadcast_message(client_name, client_name + " has disconnected")
                 client['client_disconnect_time'] = datetime.datetime.now()
+                Server.Cache.remove(clientCache)
+                clientCache['client_disconnect_time'] = datetime.datetime.now()
                 print(client_name + " has disconnected at: " + str(client['client_disconnect_time']))
                 Server.Clients.remove(client)
-                Server.Cache.remove(client)
-                Server.Cache.append(client)
+                Server.Cache.append(clientCache)
                 client_socket.close()
                 break
+            # Case for if client response is status
             elif client_message.strip() == client_name + ": status":
                 self.sendStatus(client_socket)
+            # Case for if client response is list 
+            elif client_message.strip() == client_name + ": list":
+                self.sendList(client_socket)
             else:
-                # Send the message to all other clients
+                # Echo client message to server and print as well as send message back to client with ACK
                 print("\033[1;31;40m" + client_message + "\033[0m")
                 _, _, split_message = client_message.partition(" ")
                 ack_message = split_message + " ACK"
                 client_socket.send(ack_message.encode())
-                # Thread(target = self.receive_message).start()
-                # self.broadcast_message(client_name, client_message)
 
-    # Can send the client the cache entirely or 
-    # it can send each of the strings in the cache separately
-    # That's alot tbh idk will figure out later.
+    # Handles sending the status of the cache to the client
+    # Builds message starting from status_message and sends directly to client
     def sendStatus(self, client_socket): 
         status_message = "\n"
         for client in Server.Cache:
             status_message += "Client Name: " + str(client['client_name']) + "\n"
-            status_message += "Client Address: " + str(client['client_socket'].getsockname()) + "\n"
+            status_message += "Client Address: " + str(client['client_socket']) + "\n"
             status_message += "Client Connection Time: " + str(client['client_connection_time']) + "\n"
             status_message += "Client Disconnect Time: " + str(client['client_disconnect_time']) + "\n"
+            status_message += "--------------------\n"
         client_socket.send(status_message.encode())
-        return
-    # Loop through the clients and send the message down each socket.
-    # Skip the socket if it's the same client.
-    # def broadcast_message(self, sender_name, message): 
-    #     for client in self.Clients:
-    #         client_socket = client['client_socket']
-    #         client_name = client['client_name']
-    #         if client_name != sender_name:
-    #             client_socket.send(message.encode())
-
+    
+    # Handles sending list of potential files to client from existing repository
+    # Builds a list message of the files from within repository to send to client
+    def sendList(self, client_socket):
+        list_message = "\n"
+        if (not os.listdir(LIST_NAME)): # Safety check to find if no files exist within repository, nothing to send
+            list_message = "No files found in repository\n"
+        else:
+            list_message += "Files: "
+            for file in os.listdir(LIST_NAME): # Format the files in an easier to read method
+                list_message += file + " | "
+        client_socket.send(list_message.encode())
+    
 if __name__ == '__main__':
     server = Server('127.0.0.1', 65432)
     server.listen()

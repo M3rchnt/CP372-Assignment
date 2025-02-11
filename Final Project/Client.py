@@ -18,7 +18,6 @@ class Client:
     # for messages on a separate thread. Message sending will be on 
     # the main thread.
     def talk_to_server(self):
-        # self.socket.send(self.name.encode())
         Thread(target = self.receive_message).start()
         self.send_message()
 
@@ -43,10 +42,8 @@ class Client:
                 print(server_message)
                 os._exit(0)
                 continue
-            # print("\n\033[1;31;40m" + server_message + "\033[0m")
             print(f"\rMessage: {server_message}\n{self.name} ", end = "", flush=True)
             self.locked = False
-    
 
 if __name__ == '__main__':
     Client('127.0.0.1', 65432)
